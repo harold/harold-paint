@@ -36,7 +36,8 @@
   (let [ab (js/ArrayBuffer. (* w h 4))
         dv (js/DataView. ab)
         id (js/ImageData. (js/Uint8ClampedArray. ab) w h)]
-    (atom {:frame 0
+    (atom {:gl-init false
+           :frame 0
            :picture (init-picture)
            :picture-array-buffer ab
            :picture-data-view dv
@@ -53,7 +54,8 @@
   [ratom]
   [:div.page
    [:div "harold-paint " @ms* "ms/frame"]
-   [:canvas {:id "c" :width w :height h}]])
+   [:canvas {:id "c" :width w :height h}]
+   [:canvas {:id "c2" :width w :height h}]])
 
 (defn render
   []
@@ -73,6 +75,12 @@
 
 (defn tick
   []
+  (when-not (:gl-init @state*)
+    (let [canvas (js/document.getElementById "c2")
+          gl (.getContext canvas "webgl")]
+      (.clearColor gl 1.0 0.0 0.0 1.0)
+      (.clear gl (.-COLOR_BUFFER_BIT gl))
+      (swap! state* assoc :gl-init true)))
   (let [start-time (.getTime (js/Date.))]
     (render)
     (change-palette)
