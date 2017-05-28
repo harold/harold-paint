@@ -73,13 +73,59 @@
   (swap! state* update :frame inc)
   (swap! state* assoc :palette (init-palette (:frame @state*))))
 
+(def v-shader
+  "attribute vec4 a_position;
+  void main() {
+    gl_Position = a_position;
+  }")
+
+(def f-shader
+  "precision mediump float;
+  void main() {
+    gl_FragColor = vec4(0, 0, 0.5, 1);
+  }")
+
+(defn create-shader
+  [gl type source]
+  (let [shader (.createShader gl type)]
+    (.shaderSource gl shader source)
+    (.compileShader gl shader)
+    (if (.getShaderParameter gl shader (.-COMPILE_STATUS gl))
+      shader
+      (do (println (.getShaderInfoLog gl shader))
+          (.deleteShader gl shader)))))
+
+(defn create-program
+  [gl vs fs]
+  (let [program (.createProgram gl)]
+    (.attachShader gl program vs)
+    (.attachShader gl program fs)
+    (.linkProgram gl program)
+    (if (.getProgramParameter gl program (.-LINK_STATUS gl))
+      program
+      (do (println (.getProgramLogInfo gl program))
+          (.deleteProgram program)))))
+
 (defn tick
   []
   (when-not (:gl-init @state*)
     (let [canvas (js/document.getElementById "c2")
-          gl (.getContext canvas "webgl")]
+          gl (.getContext canvas "webgl")
+          vs (create-shader gl (.-VERTEX_SHADER gl) v-shader)
+          fs (create-shader gl (.-FRAGMENT_SHADER gl) f-shader)
+          program (create-program gl vs fs)
+          positionAttributeLocation (.getAttribLocation gl program "a_position")
+          positionBuffer (.createBuffer gl)
+          _ (.bindBuffer gl (.-ARRAY_BUFFER gl) positionBuffer)
+          positions #js [0 0, 0 0.5, 0.7 0]]
+      (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. positions) (.-STATIC_DRAW gl))
+      (.viewport gl 0 0 (.-width canvas) (.-height canvas))
       (.clearColor gl 1.0 0.0 0.0 1.0)
       (.clear gl (.-COLOR_BUFFER_BIT gl))
+      (.useProgram gl program)
+      (.enableVertexAttribArray gl positionAttributeLocation)
+      (.vertexAttribPointer gl positionAttributeLocation 2 (.-FLOAT gl) false 0 0)
+      (.drawArrays gl (.-TRIANGLES gl) 0 3)
       (swap! state* assoc :gl-init true)))
   (let [start-time (.getTime (js/Date.))]
     (render)
