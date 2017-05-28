@@ -75,14 +75,22 @@
 
 (def v-shader
   "attribute vec4 a_position;
+  varying vec2 v_texcoord;
   void main() {
     gl_Position = a_position;
+    gl_Position.x = (a_position.x - 0.5) * 2.0;
+    gl_Position.y = (a_position.y - 0.5) * -2.0;
+    v_texcoord = a_position.xy;
   }")
 
 (def f-shader
   "precision mediump float;
+  varying vec2 v_texcoord;
+  uniform sampler2D u_image;
+  uniform sampler2D u_palette;
   void main() {
-    gl_FragColor = vec4(0, 0, 0.5, 1);
+    float index = texture2D(u_image, v_texcoord).a * 255.0;
+    gl_FragColor = texture2D(u_palette, vec2((index+0.5)/256.0, 0.5));
   }")
 
 (defn create-shader
@@ -114,18 +122,49 @@
           vs (create-shader gl (.-VERTEX_SHADER gl) v-shader)
           fs (create-shader gl (.-FRAGMENT_SHADER gl) f-shader)
           program (create-program gl vs fs)
-          positionAttributeLocation (.getAttribLocation gl program "a_position")
+          positionLoc (.getAttribLocation gl program "a_position")
+          imageLoc (.getUniformLocation gl program "u_image")
+          paletteLoc (.getUniformLocation gl program "u_palette")
           positionBuffer (.createBuffer gl)
           _ (.bindBuffer gl (.-ARRAY_BUFFER gl) positionBuffer)
-          positions #js [0 0, 0 0.5, 0.7 0]]
+          positions #js [0 0, 1 1, 0 1
+                         0 0, 1 0, 1 1]
+          palette (js/Uint8Array. (->> (for [i (range 256)]
+                                         [i 0 0 255])
+                                       (apply concat)))
+          paletteTex (.createTexture gl)
+          image (js/Uint8Array. (for [y (range h)
+                                      x (range w)]
+                                  (mod (+ x (rand-int 40) -20) 256)))
+          imageTex (.createTexture gl)]
+      ;; palette
+      (.activeTexture gl (.-TEXTURE1 gl))
+      (.bindTexture gl (.-TEXTURE_2D gl) paletteTex)
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-NEAREST gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (.-NEAREST gl))
+      (.texImage2D gl (.-TEXTURE_2D gl) 0 (.-RGBA gl)
+                   256 1 0 (.-RGBA gl) (.-UNSIGNED_BYTE gl) palette)
+      ;; image
+      (.activeTexture gl (.-TEXTURE0 gl))
+      (.bindTexture gl (.-TEXTURE_2D gl) imageTex)
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-NEAREST gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (.-NEAREST gl))
+      (.texImage2D gl (.-TEXTURE_2D gl) 0 (.-ALPHA gl)
+                   w h 0 (.-ALPHA gl) (.-UNSIGNED_BYTE gl) image)
       (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. positions) (.-STATIC_DRAW gl))
       (.viewport gl 0 0 (.-width canvas) (.-height canvas))
-      (.clearColor gl 1.0 0.0 0.0 1.0)
+      (.clearColor gl 0.0 1.0 0.0 1.0)
       (.clear gl (.-COLOR_BUFFER_BIT gl))
       (.useProgram gl program)
-      (.enableVertexAttribArray gl positionAttributeLocation)
-      (.vertexAttribPointer gl positionAttributeLocation 2 (.-FLOAT gl) false 0 0)
-      (.drawArrays gl (.-TRIANGLES gl) 0 3)
+      (.uniform1i gl imageLoc 0)
+      (.uniform1i gl paletteLoc 1)
+      (.enableVertexAttribArray gl positionLoc)
+      (.vertexAttribPointer gl positionLoc 2 (.-FLOAT gl) false 0 0)
+      (.drawArrays gl (.-TRIANGLES gl) 0 (quot (count positions) 2))
       (swap! state* assoc :gl-init true)))
   (let [start-time (.getTime (js/Date.))]
     (render)
