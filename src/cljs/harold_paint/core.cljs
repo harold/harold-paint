@@ -37,6 +37,7 @@
         dv (js/DataView. ab)
         id (js/ImageData. (js/Uint8ClampedArray. ab) w h)]
     (atom {:gl-init false
+           :gl nil
            :frame 0
            :picture (init-picture)
            :picture-array-buffer ab
@@ -70,7 +71,6 @@
 
 (defn change-palette
   []
-  (swap! state* update :frame inc)
   (swap! state* assoc :palette (init-palette (:frame @state*))))
 
 (def v-shader
@@ -114,11 +114,22 @@
       (do (println (.getProgramLogInfo gl program))
           (.deleteProgram program)))))
 
+(defn init-texture
+  [gl unit texture]
+  (.activeTexture gl unit)
+  (.bindTexture gl (.-TEXTURE_2D gl) texture)
+  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
+  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
+  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-NEAREST gl))
+  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (.-NEAREST gl)))
+
 (defn tick
   []
+  (swap! state* update :frame inc)
   (when-not (:gl-init @state*)
     (let [canvas (js/document.getElementById "c2")
           gl (.getContext canvas "webgl")
+          _ (swap! state* assoc :gl gl)
           vs (create-shader gl (.-VERTEX_SHADER gl) v-shader)
           fs (create-shader gl (.-FRAGMENT_SHADER gl) f-shader)
           program (create-program gl vs fs)
@@ -129,32 +140,17 @@
           _ (.bindBuffer gl (.-ARRAY_BUFFER gl) positionBuffer)
           positions #js [0 0, 1 1, 0 1
                          0 0, 1 0, 1 1]
-          palette (js/Uint8Array. (->> (for [i (range 256)]
-                                         [i 0 0 255])
-                                       (apply concat)))
           paletteTex (.createTexture gl)
+          imageTex (.createTexture gl)
           image (js/Uint8Array. (for [y (range h)
                                       x (range w)]
-                                  (mod (+ x (rand-int 40) -20) 256)))
-          imageTex (.createTexture gl)]
-      ;; palette
-      (.activeTexture gl (.-TEXTURE1 gl))
-      (.bindTexture gl (.-TEXTURE_2D gl) paletteTex)
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-NEAREST gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (.-NEAREST gl))
-      (.texImage2D gl (.-TEXTURE_2D gl) 0 (.-RGBA gl)
-                   256 1 0 (.-RGBA gl) (.-UNSIGNED_BYTE gl) palette)
+                                  (mod (+ x (rand-int 40) -20) 256)))]
       ;; image
-      (.activeTexture gl (.-TEXTURE0 gl))
-      (.bindTexture gl (.-TEXTURE_2D gl) imageTex)
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-NEAREST gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (.-NEAREST gl))
-      (.texImage2D gl (.-TEXTURE_2D gl) 0 (.-ALPHA gl)
-                   w h 0 (.-ALPHA gl) (.-UNSIGNED_BYTE gl) image)
+      (init-texture gl (.-TEXTURE0 gl) imageTex)
+      (.texImage2D gl (.-TEXTURE_2D gl) 0 (.-ALPHA gl) w h 0 (.-ALPHA gl) (.-UNSIGNED_BYTE gl) image)
+      ;; palette
+      (init-texture gl (.-TEXTURE1 gl) paletteTex)
+      ;; verts
       (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. positions) (.-STATIC_DRAW gl))
       (.viewport gl 0 0 (.-width canvas) (.-height canvas))
       (.clearColor gl 0.0 1.0 0.0 1.0)
@@ -164,8 +160,14 @@
       (.uniform1i gl paletteLoc 1)
       (.enableVertexAttribArray gl positionLoc)
       (.vertexAttribPointer gl positionLoc 2 (.-FLOAT gl) false 0 0)
-      (.drawArrays gl (.-TRIANGLES gl) 0 (quot (count positions) 2))
       (swap! state* assoc :gl-init true)))
+  (let [gl (:gl @state*)
+        frame (:frame @state*)
+        palette (js/Uint8Array. (->> (for [i (range 256)]
+                                       [(mod (+ frame i) 256) 0 0 255])
+                                     (apply concat)))]
+    (.texImage2D gl (.-TEXTURE_2D gl) 0 (.-RGBA gl) 256 1 0 (.-RGBA gl) (.-UNSIGNED_BYTE gl) palette)
+    (.drawArrays gl (.-TRIANGLES gl) 0 6))
   (let [start-time (.getTime (js/Date.))]
     (render)
     (change-palette)
