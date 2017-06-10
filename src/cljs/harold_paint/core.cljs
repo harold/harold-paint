@@ -1,5 +1,6 @@
 (ns harold-paint.core
-  (:require [reagent.core :as reagent]))
+  (:require [reagent.core :as reagent]
+            [harold-paint.color-picker :refer [color-picker]]))
 
 (enable-console-print!)
 
@@ -56,7 +57,9 @@
   [:div.page
    [:div "harold-paint " @ms* "ms/frame"]
    [:canvas {:id "c" :width w :height h}]
-   [:canvas {:id "c2" :width w :height h}]])
+   [:canvas {:id "c2" :width w :height h}]
+   [color-picker {:default-value [128 128 255]
+                  :on-change #(println %)}]])
 
 (defn render
   []
