@@ -25,7 +25,7 @@
   "hsv in [0,1] -> rgb in [0,255]"
   [h s v]
   (let [i (Math/floor (* h 6))
-        f (* h (- 6 i))
+        f (- (* h 6) i)
         p (* v (- 1 s))
         q (* v (- 1 (* f s)))
         t (* v (- 1 (* (- 1 f) s)))]
@@ -36,7 +36,7 @@
            3 [p q v]
            4 [t p v]
            5 [v p q])
-         (mapv #(* 255.0 %)))))
+         (mapv #(Math/floor (* 255.0 %))))))
 
 ;; function rgbToHsv(r, g, b) {
 ;;   r /= 255, g /= 255, b /= 255;
@@ -88,23 +88,45 @@
         [r g b] color
         w (-> canvas-ctx .-canvas .-clientWidth)
         h (-> canvas-ctx .-canvas .-clientHeight)]
-    (dotimes [i 16]
+    ;; RGB
+    (doseq [i (range 16)]
       (aset canvas-ctx "fillStyle" (str "rgb("(* 16 i)","g","b")"))
       (.fillRect canvas-ctx 0 (* (- 15 i) (quot h 16)) (quot w 9) (quot h 16)))
     (filled-circle canvas-ctx (quot w 18) (- h (* 1.0 h (/ r 255))) 6 "#000000")
     (filled-circle canvas-ctx (quot w 18) (- h (* 1.0 h (/ r 255))) 4 "#ffffff")
-    (dotimes [i 16]
+    (doseq [i (range 16)]
       (aset canvas-ctx "fillStyle" (str "rgb("r","(* 16 i)","b")"))
       (.fillRect canvas-ctx (quot w 9) (* (- 15 i) (quot h 16)) (quot w 9) (quot h 16)))
     (filled-circle canvas-ctx (* 3 (quot w 18)) (- h (* 1.0 h (/ g 255))) 6 "#000000")
     (filled-circle canvas-ctx (* 3 (quot w 18)) (- h (* 1.0 h (/ g 255))) 4 "#ffffff")
-    (dotimes [i 16]
+    (doseq [i (range 16)]
       (aset canvas-ctx "fillStyle" (str "rgb("r","g","(* 16 i)")"))
       (.fillRect canvas-ctx (* 2 (quot w 9)) (* (- 15 i) (quot h 16)) (quot w 9) (quot h 16)))
     (filled-circle canvas-ctx (* 5 (quot w 18)) (- h (* 1.0 h (/ b 255))) 6 "#000000")
     (filled-circle canvas-ctx (* 5 (quot w 18)) (- h (* 1.0 h (/ b 255))) 4 "#ffffff")
+    ;; HSV
+    (let [[hue s v] (rgb->hsv r g b)]
+      (doseq [i (range 16)]
+        (let [[lr lg lb] (hsv->rgb (/ i 16.0) s v)]
+          (aset canvas-ctx "fillStyle" (str "rgb("lr", "lg", "lb")"))
+          (.fillRect canvas-ctx (quot w 3) (* i (quot h 16)) (quot w 9) (quot h 16))))
+      (filled-circle canvas-ctx (* 7 (quot w 18)) (* h hue) 6 "#000000")
+      (filled-circle canvas-ctx (* 7 (quot w 18)) (* h hue) 4 "#ffffff")
+      (doseq [i (range 16)]
+        (let [[lr lg lb] (hsv->rgb hue (/ (- 15 i) 16.0) v)]
+          (aset canvas-ctx "fillStyle" (str "rgb("lr", "lg", "lb")"))
+          (.fillRect canvas-ctx (+ (quot w 3) (quot w 9)) (* i (quot h 16)) (quot w 9) (quot h 16))))
+      (filled-circle canvas-ctx (* 9 (quot w 18)) (* h (- 1 s)) 6 "#000000")
+      (filled-circle canvas-ctx (* 9 (quot w 18)) (* h (- 1 s)) 4 "#ffffff")
+      (doseq [i (range 16)]
+        (let [[lr lg lb] (hsv->rgb hue s (/ (- 15 i) 16.0))]
+          (aset canvas-ctx "fillStyle" (str "rgb("lr", "lg", "lb")"))
+          (.fillRect canvas-ctx (+ (quot w 3) (* 2 (quot w 9))) (* i (quot h 16)) (quot w 9) (quot h 16))
+          (filled-circle canvas-ctx (* 11 (quot w 18)) (* h (- 1 v)) 6 "#000000")
+          (filled-circle canvas-ctx (* 11 (quot w 18)) (* h (- 1 v)) 4 "#ffffff"))))
+    ;; SWATCH
     (aset canvas-ctx "fillStyle" (str "rgb("r","g","b")"))
-    (.fillRect canvas-ctx (quot w 3) 0 (quot w 3) h)))
+    (.fillRect canvas-ctx (quot (* w 2) 3) 0 (* w 2) h)))
 
 (defn- on-click
   [ctx e]
